@@ -31,6 +31,10 @@ Copy the example file and add your cookie:
 ```bash
 git clone https://github.com/CyberEDU-Cyber-Range/cyberedu-client.git
 cd cyberedu-client
+python3 -m venv venv  
+source venv/bin/activate
+pip install -e .
+
 cp .env.example cyberedu-client/.env
 cd cyberedu-client/examples
 # Edit .env and add your CYBEREDU_SESSION_COOKIE
@@ -43,6 +47,8 @@ Just run the script - it will prompt for the cookie if not found:
 ```bash
 git clone https://github.com/CyberEDU-Cyber-Range/cyberedu-client.git
 cd cyberedu-client
+python3 -m venv venv  
+source venv/bin/activate
 
 # Simple examples (recommended for first-time users)
 python examples/archive_challenge_example.py    # Educational archive
