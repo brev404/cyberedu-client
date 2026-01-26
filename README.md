@@ -65,6 +65,7 @@ agencies, and individual learners who want to develop practical cybersecurity sk
 
 ## Installation
 
+**macOS/Linux:**
 ```bash
 git clone https://github.com/CyberEDU-Cyber-Range/cyberedu-client.git
 cd cyberedu-client
@@ -73,7 +74,16 @@ source venv/bin/activate
 pip install -e .
 ```
 
-Or with development dependencies:
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/CyberEDU-Cyber-Range/cyberedu-client.git
+cd cyberedu-client
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -e .
+```
+
+**With development dependencies:**
 ```bash
 pip install -e ".[dev]"
 ```
