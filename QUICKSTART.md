@@ -29,8 +29,10 @@ The example script will automatically:
 Copy the example file and add your cookie:
 
 ```bash
+git clone https://github.com/CyberEDU-Cyber-Range/cyberedu-client.git
+cd cyberedu-client
+cp .env.example cyberedu-client/.env
 cd cyberedu-client/examples
-cp .env.example .env
 # Edit .env and add your CYBEREDU_SESSION_COOKIE
 ```
 
@@ -39,6 +41,7 @@ cp .env.example .env
 Just run the script - it will prompt for the cookie if not found:
 
 ```bash
+git clone https://github.com/CyberEDU-Cyber-Range/cyberedu-client.git
 cd cyberedu-client
 
 # Simple examples (recommended for first-time users)

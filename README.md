@@ -66,6 +66,7 @@ agencies, and individual learners who want to develop practical cybersecurity sk
 ## Installation
 
 ```bash
+git clone https://github.com/CyberEDU-Cyber-Range/cyberedu-client.git
 cd cyberedu-client
 python3 -m venv venv  
 source venv/bin/activate
