@@ -2,7 +2,7 @@
 
 **Official Python client for the CyberEdu CTF platform.**
 
-This is the official, maintained Python client library for interacting with the CyberEdu CTF platform API. It provides a comprehensive interface for managing challenges, contests, flags, files, and services on the CyberEdu platform.
+This is the official, maintained Python client library for interacting with the CyberEdu CTF platform API (cyber-edu.co / cyberedu.ro). It provides a comprehensive interface for managing challenges, contests, flags, files, and services on the CyberEdu platform.
 
 ## Overview
 
