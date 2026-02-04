@@ -20,11 +20,11 @@ CyberEduClient
 │   └── SSO_BASE_URL: str        # Auth endpoint (sso.cyber-edu.co)
 │
 ├── Internal Helpers
-│   ├── _get_headers()           # Build request headers with auth
+│   ├── _build_request_headers()  # Build request headers with auth
 │   ├── _make_request()          # Execute API request with tenant param
-│   ├── _extract_download_uuid() # Parse file download responses
-│   ├── _handle_flag_submission_response()  # Handle 400 status for wrong flags
-│   └── _save_downloaded_file()  # Write bytes to disk
+│   ├── _parse_download_uuid_from_response()  # Parse file download responses
+│   ├── _parse_flag_submission_response()     # Handle 400 status for wrong flags
+│   └── _save_downloaded_file()  # Write bytes to disk (uses _resolve_save_path, _write_file_to_disk)
 │
 └── Public Methods (grouped by domain)
     ├── Authentication & User
@@ -45,7 +45,7 @@ Public Method
 _make_request(method, path, params, json_data)
     │
     ├─► Adds tenant to query params
-    ├─► Adds session cookie to headers via _get_headers()
+    ├─► Adds session cookie to headers via _build_request_headers()
     │
     ▼
 httpx.Client.request()
@@ -123,13 +123,13 @@ This is handled internally by `download_file()` and `download_contest_file()`.
 The API returns HTTP 400 for incorrect flags (expected behavior, not error):
 
 ```python
-def _handle_flag_submission_response(self, response):
+def _parse_flag_submission_response(self, http_response):
     # 400 = wrong flag (normal), parse body for status
     # Other 4xx/5xx = actual error, raise exception
-    if response.status_code == 400:
-        return response.json()  # {"status": "failed", ...}
-    response.raise_for_status()
-    return response.json()
+    if http_response.status_code == 400:
+        return http_response.json()  # {"status": "failed", ...}
+    http_response.raise_for_status()
+    return http_response.json()
 ```
 
 ## Thread Safety

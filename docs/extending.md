@@ -43,7 +43,7 @@ def submit_special_form(self, challenge_id: str, value: str) -> Dict[str, Any]:
         f'{self.BASE_URL}/v1/special/submit',
         params={'tenant': self.tenant},
         data={'id': challenge_id, 'value': value},  # form data, not json
-        headers=self._get_headers(),
+        headers=self._build_request_headers(),
     )
     response.raise_for_status()
     return response.json()
