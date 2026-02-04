@@ -181,6 +181,8 @@ client.close()
 
 ## Checklist for New Endpoints
 
+Compliance tests in `tests/test_compliance.py` verify these items. See `tests/COMPLIANCE_MAPPING.md`.
+
 - [ ] Captured actual API request from browser
 - [ ] Method has docstring with Args/Returns
 - [ ] Uses `_make_request()` or explains why not

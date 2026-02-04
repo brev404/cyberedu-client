@@ -397,7 +397,6 @@ ruff check src/
 
 ## TODO
 1. Add support for A/D competitions.
-2. Add support for trainings.
 
 ## License
 

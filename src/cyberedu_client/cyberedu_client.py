@@ -451,7 +451,15 @@ class CyberEduClient:
         return None
 
     def get_user(self, user_id: str) -> Dict[str, Any]:
-        """Get user information by user ID."""
+        """
+        Get user information by user ID.
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            User data dictionary
+        """
         response = self._make_request("GET", f"/v1/user/{user_id}")
         response.raise_for_status()
         return response.json()
@@ -535,7 +543,15 @@ class CyberEduClient:
         return sorted_challenges[:limit]
 
     def get_challenge(self, challenge_id: str) -> Dict[str, Any]:
-        """Get challenge details."""
+        """
+        Get challenge details.
+
+        Args:
+            challenge_id: Challenge UUID
+
+        Returns:
+            Challenge data dictionary
+        """
         response = self._make_request("GET", f"/v1/challenge/{challenge_id}")
         response.raise_for_status()
         return response.json()
@@ -553,7 +569,15 @@ class CyberEduClient:
         return response.json()
 
     def subscribe_to_challenge(self, challenge_id: str) -> Dict[str, Any]:
-        """Subscribe to (unlock) a challenge."""
+        """
+        Subscribe to (unlock) a challenge.
+
+        Args:
+            challenge_id: Challenge UUID
+
+        Returns:
+            Subscription result dictionary
+        """
         # Build headers similar to other API requests
         headers = self._build_request_headers(
             {
@@ -579,7 +603,16 @@ class CyberEduClient:
     # ============================================================================
 
     def get_flag(self, challenge_id: str, flag_id: str) -> Dict[str, Any]:
-        """Get flag information (question details)."""
+        """
+        Get flag information (question details).
+
+        Args:
+            challenge_id: Challenge UUID
+            flag_id: Flag/question identifier
+
+        Returns:
+            Flag data dictionary
+        """
         response = self._make_request(
             "GET", f"/v1/domain/app/challenge/{challenge_id}/flag/{flag_id}"
         )
@@ -671,7 +704,15 @@ class CyberEduClient:
         return content
 
     def start_service(self, challenge_id: str) -> Dict[str, Any]:
-        """Start a challenge service (deployment)."""
+        """
+        Start a challenge service (deployment).
+
+        Args:
+            challenge_id: Challenge UUID
+
+        Returns:
+            Deployment result dictionary
+        """
         response = self._make_request(
             "POST",
             "/v2/governor/archive/domain/app/deployment",
@@ -681,7 +722,15 @@ class CyberEduClient:
         return response.json()
 
     def get_service_status(self, challenge_id: str) -> Dict[str, Any]:
-        """Get service/deployment status."""
+        """
+        Get service/deployment status.
+
+        Args:
+            challenge_id: Challenge UUID
+
+        Returns:
+            Status dictionary
+        """
         # Status endpoint uses POST with JSON body (based on HAR analysis)
         response = self._make_request(
             "POST",
@@ -692,7 +741,15 @@ class CyberEduClient:
         return response.json()
 
     def extend_service(self, challenge_id: str) -> Dict[str, Any]:
-        """Extend service/deployment time."""
+        """
+        Extend service/deployment time.
+
+        Args:
+            challenge_id: Challenge UUID
+
+        Returns:
+            Extension result dictionary
+        """
         response = self._make_request(
             "POST",
             "/v2/governor/archive/domain/app/deployment/extend",
@@ -702,7 +759,15 @@ class CyberEduClient:
         return response.json()
 
     def restart_service(self, challenge_id: str) -> Dict[str, Any]:
-        """Restart service/deployment."""
+        """
+        Restart service/deployment.
+
+        Args:
+            challenge_id: Challenge UUID
+
+        Returns:
+            Restart result dictionary
+        """
         response = self._make_request(
             "POST",
             "/v2/governor/archive/domain/app/deployment/restart",
@@ -1057,7 +1122,16 @@ class CyberEduClient:
     def subscribe_to_contest_challenge(
         self, contest_slug: str, challenge_id: str
     ) -> Dict[str, Any]:
-        """Subscribe to (unlock) a challenge within a contest."""
+        """
+        Subscribe to (unlock) a challenge within a contest.
+
+        Args:
+            contest_slug: Contest subdomain/slug
+            challenge_id: Challenge UUID
+
+        Returns:
+            Subscription result dictionary
+        """
         headers = self._build_request_headers(
             {
                 "Accept": "application/json, text/plain, */*",
@@ -1082,7 +1156,17 @@ class CyberEduClient:
     def get_contest_flag(
         self, contest_slug: str, challenge_id: str, flag_id: str
     ) -> Dict[str, Any]:
-        """Get flag/question information within a contest."""
+        """
+        Get flag/question information within a contest.
+
+        Args:
+            contest_slug: Contest subdomain/slug
+            challenge_id: Challenge UUID
+            flag_id: Flag/question identifier
+
+        Returns:
+            Flag data dictionary
+        """
         response = self._make_request(
             "GET", f"/v1/contest/{contest_slug}/challenge/{challenge_id}/flag/{flag_id}"
         )
@@ -1184,7 +1268,16 @@ class CyberEduClient:
         return content
 
     def get_contest_service_status(self, contest_slug: str, challenge_id: str) -> Dict[str, Any]:
-        """Get service status for a challenge within a contest."""
+        """
+        Get service status for a challenge within a contest.
+
+        Args:
+            contest_slug: Contest subdomain/slug
+            challenge_id: Challenge ID
+
+        Returns:
+            Service status dictionary
+        """
         # Contest services use POST with JSON body
         # /v2/governor/event/domain/{slug}/deployment/status
         response = self.client.post(
@@ -1198,7 +1291,16 @@ class CyberEduClient:
         return response.json()
 
     def start_contest_service(self, contest_slug: str, challenge_id: str) -> Dict[str, Any]:
-        """Start a challenge service within a contest."""
+        """
+        Start a challenge service within a contest.
+
+        Args:
+            contest_slug: Contest subdomain/slug
+            challenge_id: Challenge ID
+
+        Returns:
+            Deployment result dictionary
+        """
         response = self.client.post(
             f"{self.BASE_URL}/v2/governor/event/domain/{contest_slug}/deployment",
             params={"tenant": self.tenant},
@@ -1210,7 +1312,16 @@ class CyberEduClient:
         return response.json()
 
     def extend_contest_service(self, contest_slug: str, challenge_id: str) -> Dict[str, Any]:
-        """Extend service time for a challenge within a contest."""
+        """
+        Extend service time for a challenge within a contest.
+
+        Args:
+            contest_slug: Contest subdomain/slug
+            challenge_id: Challenge ID
+
+        Returns:
+            Extension result dictionary
+        """
         response = self.client.post(
             f"{self.BASE_URL}/v2/governor/event/domain/{contest_slug}/deployment/extend",
             params={"tenant": self.tenant},
@@ -1222,7 +1333,16 @@ class CyberEduClient:
         return response.json()
 
     def restart_contest_service(self, contest_slug: str, challenge_id: str) -> Dict[str, Any]:
-        """Restart a challenge service within a contest."""
+        """
+        Restart a challenge service within a contest.
+
+        Args:
+            contest_slug: Contest subdomain/slug
+            challenge_id: Challenge ID
+
+        Returns:
+            Restart result dictionary
+        """
         response = self.client.post(
             f"{self.BASE_URL}/v2/governor/event/domain/{contest_slug}/deployment/restart",
             params={"tenant": self.tenant},
