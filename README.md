@@ -240,7 +240,22 @@ with CyberEduClient(tenant="cyberedu", session_cookie="cookie_value") as client:
 - `get_user(user_id)` - Get user information by ID
 
 ### Challenges
-- `list_challenges(difficulty=None, category=None)` - List all challenges from base endpoint
+- `list_challenges(difficulty=None, category=None, tag_filter=None)` - List all challenges from base endpoint
+  - **Parameters**:
+    - `difficulty`: Filter by difficulty level (optional)
+    - `category`: Filter by category (optional)
+    - `tag_filter`: Optional tag filter for client-side filtering. Can be a single tag string
+      or a list of tag strings. Challenges must have at least one matching tag. This is a
+      best-effort filter and may not catch all tenant-specific challenges if tags are inconsistent.
+  - **Tenant Behavior**: The tenant parameter is automatically included based on the client's
+    tenant setting. However, note that:
+    - The API may return challenges accessible across multiple tenants
+    - The `tenant` field in challenge objects represents the original tenant where the challenge
+      was created, not necessarily the current tenant context
+    - Solve counts (`counts.owned` or similar) are typically global across all tenants,
+      not tenant-specific
+    - To identify tenant-specific challenges, use the `tag_filter` parameter (e.g., 
+      `tag_filter="UNbreakable Romania"`) or check challenge tags manually
 - `get_challenge(challenge_id)` - Get challenge details
 - `get_challenge_difficulties()` - Get available difficulty levels
 - `get_challenge_tags()` - Get available challenge tags/categories
