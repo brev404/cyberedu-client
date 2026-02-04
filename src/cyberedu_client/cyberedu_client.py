@@ -15,9 +15,70 @@ This is the official, maintained client library for the CyberEdu platform, desig
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import httpx
+
+
+def _filter_challenges_by_tags(
+    challenges: List[Dict[str, Any]],
+    required_tags: Union[str, List[str]],
+) -> List[Dict[str, Any]]:
+    """
+    Filter challenges to those having at least one of the required tags.
+
+    Args:
+        challenges: Full list of challenge dicts
+        required_tags: Single tag or list of tags (case-insensitive)
+
+    Returns:
+        Filtered list of challenges
+    """
+    tags_to_match = (
+        [required_tags] if isinstance(required_tags, str) else required_tags
+    )
+    normalized_required_tags = [tag.lower() for tag in tags_to_match]
+
+    matching_challenges = []
+    for challenge in challenges:
+        challenge_tags = challenge.get("tags", [])
+        if isinstance(challenge_tags, str):
+            challenge_tags = [challenge_tags]
+
+        normalized_challenge_tags = [
+            tag.lower() if isinstance(tag, str) else str(tag).lower()
+            for tag in challenge_tags
+        ]
+
+        if any(
+            required in normalized_challenge_tags
+            for required in normalized_required_tags
+        ):
+            matching_challenges.append(challenge)
+
+    return matching_challenges
+
+
+def _build_challenge_sort_key(
+    sort_criterion: str,
+) -> Callable[[Dict[str, Any]], Any]:
+    """
+    Build a sort key function for challenges by criterion.
+
+    Args:
+        sort_criterion: "solves", "attempts", or "points"
+
+    Returns:
+        Key function for sorted()
+    """
+    def key_func(challenge: Dict[str, Any]) -> Any:
+        if sort_criterion == "attempts":
+            return challenge.get("counts", {}).get("attempts", 0)
+        if sort_criterion == "points":
+            return challenge.get("points", 0)
+        return challenge.get("counts", {}).get("owned", 0)
+
+    return key_func
 
 
 class CyberEduClient:
@@ -417,44 +478,20 @@ class CyberEduClient:
         Example:
             challenges = client.list_challenges(tag_filter="UNbreakable Romania")
         """
-        params = {}
+        query_params: Dict[str, str] = {}
         if difficulty:
-            params["difficulty"] = difficulty
+            query_params["difficulty"] = difficulty
         if category:
-            params["category"] = category
+            query_params["category"] = category
 
-        # Use base endpoint - all information is available here
-        response = self._make_request("GET", "/v1/challenge", params=params)
+        response = self._make_request("GET", "/v1/challenge", params=query_params)
         response.raise_for_status()
-        challenges = response.json()
+        all_challenges = response.json()
 
-        # Apply client-side tag filtering if requested
         if tag_filter:
-            if isinstance(tag_filter, str):
-                tag_filter = [tag_filter]
+            return _filter_challenges_by_tags(all_challenges, tag_filter)
 
-            # Normalize tag filter to lowercase for case-insensitive matching
-            tag_filter_lower = [tag.lower() for tag in tag_filter]
-
-            filtered_challenges = []
-            for challenge in challenges:
-                # Get tags from challenge (could be in 'tags' field or other locations)
-                challenge_tags = challenge.get("tags", [])
-                if isinstance(challenge_tags, str):
-                    challenge_tags = [challenge_tags]
-
-                # Check if any tag matches (case-insensitive)
-                challenge_tag_lower = [
-                    tag.lower() if isinstance(tag, str) else str(tag).lower()
-                    for tag in challenge_tags
-                ]
-
-                if any(tag in challenge_tag_lower for tag in tag_filter_lower):
-                    filtered_challenges.append(challenge)
-
-            return filtered_challenges
-
-        return challenges
+        return all_challenges
 
     def list_top_challenges(
         self,
@@ -482,19 +519,11 @@ class CyberEduClient:
         Example:
             top = client.list_top_challenges(limit=5, sort_by="solves")
         """
-        challenges = self.list_challenges()
-
-        def _sort_key(criterion: str):
-            def key(challenge: Dict[str, Any]) -> Any:
-                if criterion == "attempts":
-                    return challenge.get("counts", {}).get("attempts", 0)
-                if criterion == "points":
-                    return challenge.get("points", 0)
-                return challenge.get("counts", {}).get("owned", 0)
-
-            return key
-
-        sorted_challenges = sorted(challenges, key=_sort_key(sort_by), reverse=True)
+        all_challenges = self.list_challenges()
+        sort_key_func = _build_challenge_sort_key(sort_by)
+        sorted_challenges = sorted(
+            all_challenges, key=sort_key_func, reverse=True
+        )
         return sorted_challenges[:limit]
 
     def get_challenge(self, challenge_id: str) -> Dict[str, Any]:
