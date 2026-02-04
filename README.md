@@ -201,6 +201,11 @@ The `examples/` directory contains several example scripts:
   - Shows contest challenges
   - Demonstrates contest-specific operations
 
+- **`training_example.py`** - Example for trainings and challenge extensions
+  - Lists trainings, gets training details
+  - Top challenges (list_top_challenges)
+  - Tag filtering (list_challenges with tag_filter)
+
 - **`interactive_client.py`** - Full-featured interactive CLI client
   - Menu-driven interface
   - Works with both archive and contest challenges
@@ -212,6 +217,7 @@ Run the examples:
 # Simple examples
 python examples/archive_challenge_example.py
 python examples/contest_challenge_example.py
+python examples/training_example.py
 
 # Full interactive client
 python examples/interactive_client.py
@@ -256,6 +262,7 @@ with CyberEduClient(tenant="cyberedu", session_cookie="cookie_value") as client:
       not tenant-specific
     - To identify tenant-specific challenges, use the `tag_filter` parameter (e.g., 
       `tag_filter="UNbreakable Romania"`) or check challenge tags manually
+- `list_top_challenges(limit=10, sort_by="solves")` - Top N challenges by solves, attempts, or points
 - `get_challenge(challenge_id)` - Get challenge details
 - `get_challenge_difficulties()` - Get available difficulty levels
 - `get_challenge_tags()` - Get available challenge tags/categories
@@ -282,6 +289,17 @@ with CyberEduClient(tenant="cyberedu", session_cookie="cookie_value") as client:
 - `get_contest_service_status(contest_slug, challenge_id)` - Get service status within a contest
 - `extend_contest_service(contest_slug, challenge_id)` - Extend service time within a contest
 - `restart_contest_service(contest_slug, challenge_id)` - Restart service within a contest
+
+### Trainings (Structured Courses)
+- `list_trainings()` - List trainings for current tenant
+- `get_training(training_id_or_slug)` - Get training details with modules
+- `subscribe_to_training(training_id_or_slug)` - Unlock training (required before content/deployment)
+- `download_training_file(training_id, file_id, save_path=None)` - Download module file (two-step)
+- `start_training_service(training_id)` - Start training deployment
+- `get_training_service_status(training_id)` - Get deployment status
+- `wait_for_training_service(training_id, timeout=120, poll_interval=3)` - Poll until deployment ready
+- `extend_training_service(training_id)` - Extend deployment time
+- `restart_training_service(training_id)` - Restart deployment
 
 ## API Endpoints
 

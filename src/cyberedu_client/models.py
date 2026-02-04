@@ -12,6 +12,7 @@ from datetime import datetime
 @dataclass
 class ChallengeFile:
     """Represents a challenge file."""
+
     id: str
     name: str
     url: Optional[str] = None
@@ -22,6 +23,7 @@ class ChallengeFile:
 @dataclass
 class Flag:
     """Represents a flag/question in a challenge."""
+
     id: str
     text: str
     type: str  # 'flag' or 'answer'
@@ -31,6 +33,7 @@ class Flag:
 @dataclass
 class ServiceInfo:
     """Represents service/deployment information."""
+
     host: Optional[str] = None
     port: Optional[int] = None
     status: Optional[str] = None  # 'running', 'stopped', 'starting', 'error'
@@ -41,6 +44,7 @@ class ServiceInfo:
 @dataclass
 class Challenge:
     """Represents a challenge."""
+
     id: str
     title: str
     category: str  # web, pwn, crypto, forensics, misc, reverse
@@ -52,35 +56,32 @@ class Challenge:
     service: Optional[ServiceInfo] = None
     solved: bool = False
     solve_count: int = 0
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Challenge':
+    def from_dict(cls, data: Dict[str, Any]) -> "Challenge":
         """Create Challenge from API response dictionary."""
-        files = [
-            ChallengeFile(**f) if isinstance(f, dict) else f
-            for f in data.get('files', [])
-        ]
-        
+        files = [ChallengeFile(**f) if isinstance(f, dict) else f for f in data.get("files", [])]
+
         flags = [
             Flag(**f) if isinstance(f, dict) else f
-            for f in data.get('flags', []) or data.get('questions', [])
+            for f in data.get("flags", []) or data.get("questions", [])
         ]
-        
-        service_data = data.get('service') or data.get('deployment')
+
+        service_data = data.get("service") or data.get("deployment")
         service = None
         if service_data:
             service = ServiceInfo(**service_data)
-        
+
         return cls(
-            id=data['id'],
-            title=data.get('title', ''),
-            category=data.get('category', ''),
-            difficulty=data.get('difficulty', ''),
-            description=data.get('description', ''),
-            points=data.get('points', 0),
+            id=data["id"],
+            title=data.get("title", ""),
+            category=data.get("category", ""),
+            difficulty=data.get("difficulty", ""),
+            description=data.get("description", ""),
+            points=data.get("points", 0),
             files=files,
             flags=flags,
             service=service,
-            solved=data.get('solved', False),
-            solve_count=data.get('solve_count', 0),
+            solved=data.get("solved", False),
+            solve_count=data.get("solve_count", 0),
         )

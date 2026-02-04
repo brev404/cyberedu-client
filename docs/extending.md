@@ -136,7 +136,7 @@ def wait_for_service(self, challenge_id: str, timeout: int = 120) -> Dict[str, A
         if state == 'running':
             return status
         elif state == 'error':
-            raise RuntimeError(f"Service failed: {status}")
+            raise RuntimeError("Service failed. Check get_service_status for details.")
         
         time.sleep(3)
     

@@ -23,9 +23,9 @@ from .cyberedu_client import CyberEduClient
 from .models import Challenge, ChallengeFile, Flag, ServiceInfo
 
 __all__ = [
-    'CyberEduClient',
-    'Challenge',
-    'ChallengeFile',
-    'Flag',
-    'ServiceInfo',
+    "CyberEduClient",
+    "Challenge",
+    "ChallengeFile",
+    "Flag",
+    "ServiceInfo",
 ]
