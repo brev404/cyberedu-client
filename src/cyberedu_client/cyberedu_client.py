@@ -34,9 +34,7 @@ def _filter_challenges_by_tags(
     Returns:
         Filtered list of challenges
     """
-    tags_to_match = (
-        [required_tags] if isinstance(required_tags, str) else required_tags
-    )
+    tags_to_match = [required_tags] if isinstance(required_tags, str) else required_tags
     normalized_required_tags = [tag.lower() for tag in tags_to_match]
 
     matching_challenges = []
@@ -46,14 +44,10 @@ def _filter_challenges_by_tags(
             challenge_tags = [challenge_tags]
 
         normalized_challenge_tags = [
-            tag.lower() if isinstance(tag, str) else str(tag).lower()
-            for tag in challenge_tags
+            tag.lower() if isinstance(tag, str) else str(tag).lower() for tag in challenge_tags
         ]
 
-        if any(
-            required in normalized_challenge_tags
-            for required in normalized_required_tags
-        ):
+        if any(required in normalized_challenge_tags for required in normalized_required_tags):
             matching_challenges.append(challenge)
 
     return matching_challenges
@@ -71,6 +65,7 @@ def _build_challenge_sort_key(
     Returns:
         Key function for sorted()
     """
+
     def key_func(challenge: Dict[str, Any]) -> Any:
         if sort_criterion == "attempts":
             return challenge.get("counts", {}).get("attempts", 0)
@@ -79,6 +74,33 @@ def _build_challenge_sort_key(
         return challenge.get("counts", {}).get("owned", 0)
 
     return key_func
+
+
+def _extract_deployment_state_from_status(
+    status_response: Dict[str, Any],
+) -> str:
+    """
+    Extract deployment state string from status API response.
+
+    Args:
+        status_response: Full status dict from deployment/status endpoint
+
+    Returns:
+        Lowercase state string (e.g., 'running', 'pending', 'error')
+    """
+    status_data = status_response.get("data", {})
+    raw_state = status_data.get("status", "")
+    return str(raw_state).lower()
+
+
+def _is_deployment_ready(state: str) -> bool:
+    """Return True if deployment state indicates ready for use."""
+    return "running" in state or state == "ready"
+
+
+def _is_deployment_failed(state: str) -> bool:
+    """Return True if deployment state indicates failure."""
+    return "error" in state or state == "failed"
 
 
 class CyberEduClient:
@@ -225,9 +247,7 @@ class CyberEduClient:
 
         return response
 
-    def _parse_download_uuid_from_response(
-        self, download_response_body: Dict[str, Any]
-    ) -> str:
+    def _parse_download_uuid_from_response(self, download_response_body: Dict[str, Any]) -> str:
         """
         Parse download UUID from API response body.
 
@@ -253,15 +273,12 @@ class CyberEduClient:
 
         if not download_uuid:
             raise ValueError(
-                "Could not extract download UUID from response: "
-                f"{download_response_body}"
+                "Could not extract download UUID from response: " f"{download_response_body}"
             )
 
         return download_uuid
 
-    def _parse_flag_submission_response(
-        self, http_response: httpx.Response
-    ) -> Dict[str, Any]:
+    def _parse_flag_submission_response(self, http_response: httpx.Response) -> Dict[str, Any]:
         """
         Parse flag submission response body, accepting 400 as valid.
 
@@ -284,9 +301,7 @@ class CyberEduClient:
             http_response.raise_for_status()
             return http_response.json()
 
-    def _extract_filename_from_content_disposition(
-        self, content_disposition_header: str
-    ) -> str:
+    def _extract_filename_from_content_disposition(self, content_disposition_header: str) -> str:
         """
         Extract filename from Content-Disposition header.
 
@@ -322,18 +337,13 @@ class CyberEduClient:
         """
         resolved_path = Path(requested_path)
 
-        is_directory_or_ambiguous = (
-            resolved_path.is_dir()
-            or (not resolved_path.exists() and not resolved_path.suffix)
+        is_directory_or_ambiguous = resolved_path.is_dir() or (
+            not resolved_path.exists() and not resolved_path.suffix
         )
 
         if is_directory_or_ambiguous:
-            content_disposition = http_response.headers.get(
-                "content-disposition", ""
-            )
-            filename = self._extract_filename_from_content_disposition(
-                content_disposition
-            )
+            content_disposition = http_response.headers.get("content-disposition", "")
+            filename = self._extract_filename_from_content_disposition(content_disposition)
             resolved_path.mkdir(parents=True, exist_ok=True)
             resolved_path = resolved_path / filename
         else:
@@ -521,9 +531,7 @@ class CyberEduClient:
         """
         all_challenges = self.list_challenges()
         sort_key_func = _build_challenge_sort_key(sort_by)
-        sorted_challenges = sorted(
-            all_challenges, key=sort_key_func, reverse=True
-        )
+        sorted_challenges = sorted(all_challenges, key=sort_key_func, reverse=True)
         return sorted_challenges[:limit]
 
     def get_challenge(self, challenge_id: str) -> Dict[str, Any]:
@@ -969,18 +977,22 @@ class CyberEduClient:
         Example:
             status = client.wait_for_training_service(training_id)
         """
-        start = time.time()
-        status: Dict[str, Any] = {}
-        while time.time() - start < timeout:
-            status = self.get_training_service_status(training_id)
-            state = status.get("data", {}).get("status", "").lower()
-            if "running" in state or state == "ready":
-                return status
-            if "error" in state or state == "failed":
+        deadline = time.time() + timeout
+        last_status: Dict[str, Any] = {}
+
+        while time.time() < deadline:
+            last_status = self.get_training_service_status(training_id)
+            deployment_state = _extract_deployment_state_from_status(last_status)
+
+            if _is_deployment_ready(deployment_state):
+                return last_status
+            if _is_deployment_failed(deployment_state):
                 raise RuntimeError(
-                    "Training deployment failed. Check get_training_service_status for details."
+                    "Training deployment failed. " "Check get_training_service_status for details."
                 )
+
             time.sleep(poll_interval)
+
         raise TimeoutError(
             f"Training deployment not ready after {timeout}s. "
             "Check get_training_service_status for current state."
