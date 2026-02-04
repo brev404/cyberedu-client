@@ -12,6 +12,7 @@ This is the official, maintained client library for the CyberEdu platform, desig
 - Production-ready and fully tested
 """
 
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -100,25 +101,26 @@ class CyberEduClient:
         """Set the session cookie for authentication."""
         self.session_cookie = cookie_value
 
-    def _get_headers(self, additional_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    def _build_request_headers(
+        self, extra_headers: Optional[Dict[str, str]] = None
+    ) -> Dict[str, str]:
         """
-        Get request headers including session cookie.
+        Build request headers including session cookie.
 
         Args:
-            additional_headers: Optional additional headers to include
+            extra_headers: Optional extra headers to merge in
 
         Returns:
-            Dictionary of headers
+            Dictionary of headers for API requests
         """
-        headers = {}
-        if additional_headers:
-            headers.update(additional_headers)
+        request_headers: Dict[str, str] = {}
+        if extra_headers:
+            request_headers.update(extra_headers)
 
-        # Add session cookie if available
         if self.session_cookie:
-            headers["Cookie"] = f"cyberedu_session={self.session_cookie}"
+            request_headers["Cookie"] = f"cyberedu_session={self.session_cookie}"
 
-        return headers
+        return request_headers
 
     def _make_request(
         self,
@@ -148,7 +150,7 @@ class CyberEduClient:
         query_params["tenant"] = self.tenant
 
         # Prepare headers
-        request_headers = self._get_headers(headers)
+        request_headers = self._build_request_headers(headers)
 
         # Make request
         response = self.client.request(
@@ -162,57 +164,145 @@ class CyberEduClient:
 
         return response
 
-    def _extract_download_uuid(self, download_data: Dict[str, Any]) -> str:
+    def _parse_download_uuid_from_response(
+        self, download_response_body: Dict[str, Any]
+    ) -> str:
         """
-        Extract UUID from download response.
+        Parse download UUID from API response body.
 
         Args:
-            download_data: JSON response from download endpoint
+            download_response_body: JSON response from download endpoint
 
         Returns:
-            UUID string
+            Download UUID string
 
         Raises:
-            ValueError: If UUID cannot be extracted
+            ValueError: If UUID cannot be extracted from response
         """
-        uuid = None
-        if "data" in download_data:
-            if isinstance(download_data["data"], dict) and "uuid" in download_data["data"]:
-                uuid = download_data["data"]["uuid"]
-            elif isinstance(download_data["data"], str):
-                uuid = download_data["data"]
-        elif "uuid" in download_data:
-            uuid = download_data["uuid"]
+        download_uuid: Optional[str] = None
+        response_data = download_response_body.get("data")
 
-        if not uuid:
-            raise ValueError(f"Could not extract download UUID from response: {download_data}")
+        if response_data is not None:
+            if isinstance(response_data, dict) and "uuid" in response_data:
+                download_uuid = response_data["uuid"]
+            elif isinstance(response_data, str):
+                download_uuid = response_data
+        elif "uuid" in download_response_body:
+            download_uuid = download_response_body["uuid"]
 
-        return uuid
+        if not download_uuid:
+            raise ValueError(
+                "Could not extract download UUID from response: "
+                f"{download_response_body}"
+            )
 
-    def _handle_flag_submission_response(self, response: httpx.Response) -> Dict[str, Any]:
+        return download_uuid
+
+    def _parse_flag_submission_response(
+        self, http_response: httpx.Response
+    ) -> Dict[str, Any]:
         """
-        Handle flag submission response, including 400 status codes.
+        Parse flag submission response body, accepting 400 as valid.
+
+        The API returns status in the body even for failed submissions (400).
+        Other error codes are raised.
 
         Args:
-            response: HTTP response from flag submission
+            http_response: HTTP response from flag submission endpoint
 
         Returns:
-            Submission result dictionary
+            Parsed submission result dictionary
         """
-        # Try to parse JSON response even for 400 status codes
-        # The API returns status information in the body even for failed submissions
         try:
-            result = response.json()
-            # If we got a valid JSON response, return it (even if status code is 400)
-            # Only raise for other error status codes
-            if response.status_code == 400:
-                return result
-            response.raise_for_status()
-            return result
+            parsed_body = http_response.json()
+            if http_response.status_code == 400:
+                return parsed_body
+            http_response.raise_for_status()
+            return parsed_body
         except Exception:
-            # If JSON parsing fails, raise the HTTP error
-            response.raise_for_status()
-            return response.json()
+            http_response.raise_for_status()
+            return http_response.json()
+
+    def _extract_filename_from_content_disposition(
+        self, content_disposition_header: str
+    ) -> str:
+        """
+        Extract filename from Content-Disposition header.
+
+        Args:
+            content_disposition_header: Value of Content-Disposition header
+
+        Returns:
+            Extracted filename or 'downloaded_file' if not found
+        """
+        if "filename=" not in content_disposition_header:
+            return "downloaded_file"
+
+        match = re.search(
+            r'filename[*]?=["\']?([^"\';\s]+)["\']?',
+            content_disposition_header,
+        )
+        return match.group(1) if match else "downloaded_file"
+
+    def _resolve_save_path(
+        self,
+        requested_path: Union[str, Path],
+        http_response: httpx.Response,
+    ) -> Path:
+        """
+        Resolve final file path (directory + filename or explicit path).
+
+        Args:
+            requested_path: User-provided path (directory or full path)
+            http_response: Response with Content-Disposition for filename
+
+        Returns:
+            Resolved absolute Path for writing
+        """
+        resolved_path = Path(requested_path)
+
+        is_directory_or_ambiguous = (
+            resolved_path.is_dir()
+            or (not resolved_path.exists() and not resolved_path.suffix)
+        )
+
+        if is_directory_or_ambiguous:
+            content_disposition = http_response.headers.get(
+                "content-disposition", ""
+            )
+            filename = self._extract_filename_from_content_disposition(
+                content_disposition
+            )
+            resolved_path.mkdir(parents=True, exist_ok=True)
+            resolved_path = resolved_path / filename
+        else:
+            resolved_path.parent.mkdir(parents=True, exist_ok=True)
+
+        return resolved_path
+
+    def _write_file_to_disk(
+        self,
+        file_content: bytes,
+        destination_path: Path,
+    ) -> Dict[str, Any]:
+        """
+        Write bytes to a file path.
+
+        Args:
+            file_content: Raw file bytes
+            destination_path: Path where file will be written
+
+        Returns:
+            Dict with success, path, and size
+        """
+        with open(destination_path, "wb") as file_handle:
+            file_handle.write(file_content)
+
+        return {
+            "success": True,
+            "path": str(destination_path.absolute()),
+            "size": len(file_content),
+        }
 
     def _save_downloaded_file(
         self,
@@ -231,41 +321,8 @@ class CyberEduClient:
         Returns:
             Dictionary with 'path', 'size', and 'success' keys
         """
-        save_path = Path(save_path)
-
-        # If save_path is a directory, try to get filename from response headers
-        if save_path.is_dir() or (not save_path.exists() and not save_path.suffix):
-            # Try to extract filename from Content-Disposition header
-            filename = None
-            content_disposition = response.headers.get("content-disposition", "")
-            if "filename=" in content_disposition:
-                # Parse filename from header: attachment; filename="example.txt"
-                import re
-
-                match = re.search(r'filename[*]?=["\']?([^"\';\s]+)["\']?', content_disposition)
-                if match:
-                    filename = match.group(1)
-
-            # Fallback to a default filename if not found
-            if not filename:
-                filename = "downloaded_file"
-
-            # Ensure directory exists
-            save_path.mkdir(parents=True, exist_ok=True)
-            save_path = save_path / filename
-        else:
-            # Ensure parent directory exists
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write content to file
-        with open(save_path, "wb") as f:
-            f.write(content)
-
-        return {
-            "success": True,
-            "path": str(save_path.absolute()),
-            "size": len(content),
-        }
+        destination_path = self._resolve_save_path(save_path, response)
+        return self._write_file_to_disk(content, destination_path)
 
     # ============================================================================
     # Authentication & User Methods
@@ -461,7 +518,7 @@ class CyberEduClient:
     def subscribe_to_challenge(self, challenge_id: str) -> Dict[str, Any]:
         """Subscribe to (unlock) a challenge."""
         # Build headers similar to other API requests
-        headers = self._get_headers(
+        headers = self._build_request_headers(
             {
                 "Accept": "application/json, text/plain, */*",
                 "Origin": "https://app.cyber-edu.co",
@@ -526,10 +583,10 @@ class CyberEduClient:
             f"{self.BASE_URL}/v1/domain/app/challenge/{challenge_id}/submit-attempt",
             params={"tenant": self.tenant},
             data=data,
-            headers=self._get_headers(),
+            headers=self._build_request_headers(),
         )
 
-        return self._handle_flag_submission_response(response)
+        return self._parse_flag_submission_response(response)
 
     def download_file(
         self,
@@ -563,10 +620,10 @@ class CyberEduClient:
         download_data = response.json()
 
         # Extract UUID from response (structure: data.data.uuid or data.uuid)
-        uuid = self._extract_download_uuid(download_data)
+        download_uuid = self._parse_download_uuid_from_response(download_data)
 
         # Step 2: Download the actual file using the UUID
-        download_response = self._make_request("GET", f"/v1/download/{uuid}")
+        download_response = self._make_request("GET", f"/v1/download/{download_uuid}")
         download_response.raise_for_status()
         content = download_response.content
 
@@ -707,7 +764,7 @@ class CyberEduClient:
         """
         # Use client.get directly (not _make_request): subscribe endpoint requires
         # specific Accept/Origin/Referer headers; pattern from extending.md Step 3.
-        headers = self._get_headers(
+        headers = self._build_request_headers(
             {
                 "Accept": "application/json, text/plain, */*",
                 "Origin": "https://app.cyber-edu.co",
@@ -757,8 +814,8 @@ class CyberEduClient:
         )
         response.raise_for_status()
         download_data = response.json()
-        uuid = self._extract_download_uuid(download_data)
-        download_response = self._make_request("GET", f"/v1/download/{uuid}")
+        download_uuid = self._parse_download_uuid_from_response(download_data)
+        download_response = self._make_request("GET", f"/v1/download/{download_uuid}")
         download_response.raise_for_status()
         content = download_response.content
         if save_path is not None:
@@ -960,7 +1017,7 @@ class CyberEduClient:
         self, contest_slug: str, challenge_id: str
     ) -> Dict[str, Any]:
         """Subscribe to (unlock) a challenge within a contest."""
-        headers = self._get_headers(
+        headers = self._build_request_headers(
             {
                 "Accept": "application/json, text/plain, */*",
                 "Origin": "https://app.cyber-edu.co",
@@ -1025,10 +1082,10 @@ class CyberEduClient:
             f"{self.BASE_URL}/v1/domain/{contest_slug}/challenge/{challenge_id}/submit-attempt",
             params={"tenant": self.tenant},
             data=data,
-            headers=self._get_headers(),
+            headers=self._build_request_headers(),
         )
 
-        return self._handle_flag_submission_response(response)
+        return self._parse_flag_submission_response(response)
 
     def download_contest_file(
         self,
@@ -1072,10 +1129,10 @@ class CyberEduClient:
         download_data = response.json()
 
         # Extract UUID from response
-        uuid = self._extract_download_uuid(download_data)
+        download_uuid = self._parse_download_uuid_from_response(download_data)
 
         # Step 2: Download the actual file using the UUID
-        download_response = self._make_request("GET", f"/v1/download/{uuid}")
+        download_response = self._make_request("GET", f"/v1/download/{download_uuid}")
         download_response.raise_for_status()
         content = download_response.content
 
@@ -1093,7 +1150,7 @@ class CyberEduClient:
             f"{self.BASE_URL}/v2/governor/event/domain/{contest_slug}/deployment/status",
             params={"tenant": self.tenant},
             json={"id": challenge_id},
-            headers=self._get_headers(),
+            headers=self._build_request_headers(),
             timeout=self.timeout,
         )
         response.raise_for_status()
@@ -1105,7 +1162,7 @@ class CyberEduClient:
             f"{self.BASE_URL}/v2/governor/event/domain/{contest_slug}/deployment",
             params={"tenant": self.tenant},
             json={"id": challenge_id},
-            headers=self._get_headers(),
+            headers=self._build_request_headers(),
             timeout=self.timeout,
         )
         response.raise_for_status()
@@ -1117,7 +1174,7 @@ class CyberEduClient:
             f"{self.BASE_URL}/v2/governor/event/domain/{contest_slug}/deployment/extend",
             params={"tenant": self.tenant},
             json={"id": challenge_id},
-            headers=self._get_headers(),
+            headers=self._build_request_headers(),
             timeout=self.timeout,
         )
         response.raise_for_status()
@@ -1129,7 +1186,7 @@ class CyberEduClient:
             f"{self.BASE_URL}/v2/governor/event/domain/{contest_slug}/deployment/restart",
             params={"tenant": self.tenant},
             json={"id": challenge_id},
-            headers=self._get_headers(),
+            headers=self._build_request_headers(),
             timeout=self.timeout,
         )
         response.raise_for_status()
