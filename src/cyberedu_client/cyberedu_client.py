@@ -333,16 +333,26 @@ class CyberEduClient:
         self,
         difficulty: Optional[str] = None,
         category: Optional[str] = None,
+        tag_filter: Optional[Union[str, List[str]]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        List all challenges.
+        List all challenges for the current tenant.
+        
+        The tenant is set via the client (use cyberedu_switch_tenant first for a
+        specific org). Returns tenant-filtered challenges with tenant-specific
+        solve counts (counts.owned).
         
         Args:
             difficulty: Filter by difficulty (optional)
             category: Filter by category (optional)
+            tag_filter: Optional tag filter for client-side filtering. Can be a single
+                       tag string or a list of tag strings. Challenges must have at
+                       least one matching tag. This is a best-effort filter and may not
+                       catch all tenant-specific challenges if tags are inconsistent.
             
         Returns:
-            List of challenge dictionaries
+            List of challenge dicts with id, title, category, difficulty, points,
+            counts.owned (solves), counts.attempts, tags, tenant, etc.
         """
         params = {}
         if difficulty:
@@ -353,7 +363,70 @@ class CyberEduClient:
         # Use base endpoint - all information is available here
         response = self._make_request('GET', '/v1/challenge', params=params)
         response.raise_for_status()
-        return response.json()
+        challenges = response.json()
+        
+        # Apply client-side tag filtering if requested
+        if tag_filter:
+            if isinstance(tag_filter, str):
+                tag_filter = [tag_filter]
+            
+            # Normalize tag filter to lowercase for case-insensitive matching
+            tag_filter_lower = [tag.lower() for tag in tag_filter]
+            
+            filtered_challenges = []
+            for challenge in challenges:
+                # Get tags from challenge (could be in 'tags' field or other locations)
+                challenge_tags = challenge.get('tags', [])
+                if isinstance(challenge_tags, str):
+                    challenge_tags = [challenge_tags]
+                
+                # Check if any tag matches (case-insensitive)
+                challenge_tag_lower = [tag.lower() if isinstance(tag, str) else str(tag).lower() 
+                                     for tag in challenge_tags]
+                
+                if any(tag in challenge_tag_lower for tag in tag_filter_lower):
+                    filtered_challenges.append(challenge)
+            
+            return filtered_challenges
+        
+        return challenges
+    
+    def list_top_challenges(
+        self,
+        limit: int = 10,
+        sort_by: str = "solves",
+    ) -> List[Dict[str, Any]]:
+        """
+        Get the top N most solved challenges for the current tenant.
+        
+        Use this when you need leaderboard-style data: "most popular challenges",
+        "top solved", "most attempts". Respects the current tenant from
+        cyberedu_switch_tenant. Call cyberedu_switch_tenant first if you need
+        a specific organization (e.g., unbreakable, cyberedu).
+        
+        Args:
+            limit: Maximum number of challenges to return (default: 10)
+            sort_by: Sort criterion - "solves" (counts.owned, most solved first),
+                     "attempts" (counts.attempts, most attempted first), or
+                     "points" (challenge points, highest first). Default: solves
+            
+        Returns:
+            List of challenge dicts sorted by the chosen criterion, each with
+            id, title, difficulty, points, counts.owned (solves), counts.attempts
+        """
+        challenges = self.list_challenges()
+        
+        if sort_by == "solves":
+            key = lambda c: c.get("counts", {}).get("owned", 0)
+        elif sort_by == "attempts":
+            key = lambda c: c.get("counts", {}).get("attempts", 0)
+        elif sort_by == "points":
+            key = lambda c: c.get("points", 0)
+        else:
+            key = lambda c: c.get("counts", {}).get("owned", 0)
+        
+        sorted_challenges = sorted(challenges, key=key, reverse=True)
+        return sorted_challenges[:limit]
     
     def get_challenge(self, challenge_id: str) -> Dict[str, Any]:
         """Get challenge details."""
@@ -547,6 +620,168 @@ class CyberEduClient:
         response.raise_for_status()
         return response.json()
     
+    # ============================================================================
+    # Training Methods
+    # ============================================================================
+    
+    def list_trainings(self) -> List[Dict[str, Any]]:
+        """
+        List all trainings for the current tenant.
+        
+        Trainings are structured courses (e.g., HeapVault) - different from
+        challenges. Availability and count vary by tenant: cyberedu has fewer
+        (often paid), unbreakable may have more. Use cyberedu_switch_tenant
+        first for a specific org.
+        
+        Returns:
+            List of training dicts with id, slug, title, overview, is_free,
+            is_owned, difficulty, modules_count, prices, status, etc.
+        """
+        response = self._make_request('GET', '/v1/trainings')
+        response.raise_for_status()
+        data = response.json()
+        return data.get('data', []) if isinstance(data, dict) else data
+
+    def get_training(self, training_id_or_slug: str) -> Dict[str, Any]:
+        """
+        Get full training details including modules with text, images, and deployment info.
+        
+        Trainings have multiple modules; each module may have content_html (text),
+        media (images), files, and a deployment (lab instance). Use this after
+        list_trainings to understand structure and content before subscribing.
+        
+        Args:
+            training_id_or_slug: Training UUID or slug (e.g., 'heapvault-training')
+            
+        Returns:
+            Training dict with id, slug, title, overview, modules (list of module
+            dicts with content_html, media, files, deployment, challenge), etc.
+        """
+        response = self._make_request('GET', f'/v1/trainings/{training_id_or_slug}')
+        response.raise_for_status()
+        data = response.json()
+        return data.get('data', data) if isinstance(data, dict) else data
+
+    def subscribe_to_training(self, training_id_or_slug: str) -> Dict[str, Any]:
+        """
+        Subscribe to (unlock) a training.
+        
+        Call this to gain access to the training content and deployments.
+        Required before accessing module content or starting deployments.
+        
+        Args:
+            training_id_or_slug: Training UUID or slug
+            
+        Returns:
+            Subscription result dictionary
+        """
+        headers = self._get_headers({
+            'Accept': 'application/json, text/plain, */*',
+            'Origin': 'https://app.cyber-edu.co',
+            'Referer': 'https://app.cyber-edu.co/',
+        })
+        response = self.client.get(
+            f'/v1/trainings/{training_id_or_slug}/actions/subscribe',
+            params={'tenant': self.tenant},
+            headers=headers,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def download_training_file(
+        self,
+        training_id: str,
+        file_id: str,
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Union[bytes, Dict[str, Any]]:
+        """
+        Download a file from a training (e.g., module attachment or resource).
+        
+        The download process is two-step:
+        1. Request download URL which returns a UUID
+        2. Use that UUID to download the actual file from /v1/download/{uuid}
+        
+        Args:
+            training_id: Training UUID
+            file_id: File ID (from module's files or media)
+            save_path: Optional path to save the file. Can be a directory or full path.
+                      If a directory, the file will be saved with its original name.
+                      If not provided, returns the file content as bytes.
+            
+        Returns:
+            If save_path is provided: Dictionary with 'path', 'size', and 'success' keys
+            If save_path is not provided: File content as bytes
+        """
+        response = self._make_request(
+            'GET',
+            f'/v1/trainings/{training_id}/actions/download/{file_id}',
+        )
+        response.raise_for_status()
+        download_data = response.json()
+        uuid = self._extract_download_uuid(download_data)
+        download_response = self._make_request('GET', f'/v1/download/{uuid}')
+        download_response.raise_for_status()
+        content = download_response.content
+        if save_path is not None:
+            return self._save_downloaded_file(content, save_path, download_response)
+        return content
+
+    def start_training_service(self, training_id: str) -> Dict[str, Any]:
+        """
+        Start a training deployment (lab instance).
+        
+        Trainings with deployments provide a lab environment. Call this to start
+        the instance; use get_training_service_status to check when ready.
+        
+        Args:
+            training_id: Training UUID (from get_training or list_trainings)
+            
+        Returns:
+            Deployment result dictionary
+        """
+        response = self._make_request(
+            'POST',
+            '/v2/governor/training/domain/app/deployment',
+            json_data={'id': training_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_training_service_status(self, training_id: str) -> Dict[str, Any]:
+        """Get training deployment/service status."""
+        response = self._make_request(
+            'POST',
+            '/v2/governor/training/domain/app/deployment/status',
+            json_data={'id': training_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def extend_training_service(self, training_id: str) -> Dict[str, Any]:
+        """Extend training deployment time before it expires."""
+        response = self._make_request(
+            'POST',
+            '/v2/governor/training/domain/app/deployment/extend',
+            json_data={'id': training_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def restart_training_service(self, training_id: str) -> Dict[str, Any]:
+        """Restart a training deployment."""
+        response = self._make_request(
+            'POST',
+            '/v2/governor/training/domain/app/deployment/restart',
+            json_data={'id': training_id},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # ============================================================================
+    # Contest Methods
+    # ============================================================================
+
     def get_contest(self, contest_slug: str) -> Dict[str, Any]:
         """
         Get contest details.
